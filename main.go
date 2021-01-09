@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -18,17 +20,49 @@ type extractedJob struct {
 	summary  string
 }
 
-var baseURL string = "https://kr.indeed.com/jobs?q=python&limit=50"
+//var baseURL string = "https://kr.indeed.com/jobs?q=python&limit=50"
+var baseURL string = "https://kr.indeed.com/jobs?q="
 
 func main() {
+	var searchKey string
+	fmt.Println("---< Indeed Job Scraper >---")
+	fmt.Print("Search keyword: ")
+	fmt.Scan(&searchKey)
+
+	baseURL = baseURL + searchKey + "&limit=50"
+	fmt.Println("---Start search---")
+
 	totalPages := getPages()
-	fmt.Println("pages:", totalPages)
+	fmt.Println("Total pages:", totalPages)
 
 	var jobs []extractedJob
 
 	for i := 0; i < totalPages; i++ {
 		extractedJobs := getPage(i)
 		jobs = append(jobs, extractedJobs...)
+		fmt.Printf("Page %d complete!\n", i+1)
+	}
+
+	writeJobs(jobs)
+	fmt.Println("All Complete!")
+}
+
+func writeJobs(jobs []extractedJob) {
+	file, err := os.Create("jobs.csv")
+	checkErr(err)
+
+	w := csv.NewWriter(file)
+	defer w.Flush()
+
+	headers := []string{"ID", "TITLE", "LOCATION", "SALARY", "SUMMARY"}
+
+	werr := w.Write(headers)
+	checkErr(werr)
+
+	for _, job := range jobs {
+		jobSilce := []string{"https://kr.indeed.com/viewjob?jk=" + job.id, job.title, job.location, job.salary, job.summary}
+		jobwerr := w.Write(jobSilce)
+		checkErr(jobwerr)
 	}
 }
 
@@ -52,7 +86,7 @@ func getPage(page int) []extractedJob {
 		title := cleanString(card.Find(".title>a").Text())
 		location := cleanString(card.Find(".sjcl").Text())
 		salary := cleanString(card.Find(".salaryText").Text())
-		summary := cleanString(card.Find(".sammary").Text())
+		summary := cleanString(card.Find(".summary").Text())
 		job := extractedJob{
 			id:       id,
 			title:    title,
@@ -83,7 +117,9 @@ func getPages() int {
 	doc.Find(".pagination").Each(func(i int, s *goquery.Selection) {
 		pages = s.Find("a").Length()
 	})
-
+	if pages == 0 {
+		return 1
+	}
 	return pages
 }
 
